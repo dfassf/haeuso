@@ -1,0 +1,31 @@
+# Node
+node_modules
+npm-debug.log*
+apps/web/dist
+apps/web/tsconfig.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+apps/api/build/
+
+# Env
+.env
+.env.*
+!.env.example
+!apps/api/.env.example
+
+# Development docs (local notes)
+docs/
+dev-docs/
+notes/
+*.notes.md
+*.draft.md
+*개발문서*.md
+*작업기록*.md
+
+# OS
+.DS_Store
