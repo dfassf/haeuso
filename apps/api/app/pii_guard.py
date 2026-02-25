@@ -14,10 +14,10 @@ class PIIMaskResult:
 
 PII_PATTERNS: Final[list[tuple[str, str, re.Pattern[str]]]] = [
     ("email", "[이메일]", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")),
-    ("phone", "[휴대전화]", re.compile(r"\b(?:\+?82[-\s]?)?0?1[016789][-\s]?\d{3,4}[-\s]?\d{4}\b")),
-    ("rrn", "[주민번호]", re.compile(r"\b\d{6}-?[1-4]\d{6}\b")),
-    ("business_no", "[사업자번호]", re.compile(r"\b\d{3}-\d{2}-\d{5}\b")),
-    ("card_no", "[카드번호]", re.compile(r"\b(?:\d{4}[-\s]?){3}\d{4}\b")),
+    ("phone", "[휴대전화]", re.compile(r"(?<!\d)(?:\+?82[-\s]?)?0?1[016789][-\s]?\d{3,4}[-\s]?\d{4}(?!\d)")),
+    ("rrn", "[주민번호]", re.compile(r"(?<!\d)\d{6}-?[1-4]\d{6}(?!\d)")),
+    ("business_no", "[사업자번호]", re.compile(r"(?<!\d)\d{3}-\d{2}-\d{5}(?!\d)")),
+    ("card_no", "[카드번호]", re.compile(r"(?<!\d)(?:\d{4}[-\s]?){3}\d{4}(?!\d)")),
 ]
 
 
