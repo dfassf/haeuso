@@ -29,6 +29,15 @@ def test_mask_pii_replaces_major_patterns() -> None:
     assert "hello@test.com" not in result.masked_text
 
 
+def test_mask_pii_handles_korean_suffix_after_phone() -> None:
+    text = "핸드폰번호가 010-1234-5555인데 화가 납니다."
+    result = mask_pii(text)
+
+    assert "phone" in result.detected_types
+    assert "[휴대전화]인데" in result.masked_text
+    assert "010-1234-5555" not in result.masked_text
+
+
 def test_comfort_masks_pii_before_llm(monkeypatch) -> None:
     captured: dict[str, str] = {}
 

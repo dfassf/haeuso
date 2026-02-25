@@ -18,6 +18,14 @@ const EMOTIONS: EmotionOption[] = [
 ];
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const UNDO_TIMEOUT_MS = 5000;
+const FLUSH_KNOB_SIZE = 44;
+const FLUSH_TRACK_PADDING = 5;
+const FLUSH_PROGRESS_PADDING = 0;
+const FLUSH_TRIGGER_RATIO = 0.86;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
 
 export default function App() {
   const [content, setContent] = useState('');
@@ -30,11 +38,31 @@ export default function App() {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [undoEntry, setUndoEntry] = useState<JournalEntry | null>(null);
   const undoTimerRef = useRef<number | null>(null);
+  const flushTrackRef = useRef<HTMLDivElement | null>(null);
+  const flushDragRef = useRef<{ pointerId: number | null; startX: number; startOffset: number }>({
+    pointerId: null,
+    startX: 0,
+    startOffset: 0,
+  });
+  const [flushTrackWidth, setFlushTrackWidth] = useState(0);
+  const [flushOffset, setFlushOffset] = useState(0);
+  const [flushDragging, setFlushDragging] = useState(false);
+  const [flushSubmitting, setFlushSubmitting] = useState(false);
   const comfortSource = getComfortSource();
   const privacyHint =
     comfortSource === 'api'
-      ? '입력 내용은 저장되지 않으며, API 호출 전 개인정보가 자동 마스킹됩니다.'
-      : '입력 내용은 저장되지 않고, 이 기기 안에서만 처리됩니다.';
+      ? '입력한 글은 저장되지 않고 바로 사라져요.'
+      : '입력한 글은 저장되지 않고, 이 기기 안에서만 잠깐 처리돼요.';
+  const flushMaxOffset = Math.max(0, flushTrackWidth - FLUSH_KNOB_SIZE - FLUSH_TRACK_PADDING * 2);
+  const flushProgressWidth = Math.max(
+    0,
+    Math.min(
+      flushTrackWidth - FLUSH_PROGRESS_PADDING,
+      flushOffset + FLUSH_KNOB_SIZE + FLUSH_TRACK_PADDING * 2 - FLUSH_PROGRESS_PADDING,
+    ),
+  );
+  const flushDisabled = comfortLoading || flushSubmitting;
+  const flushReady = flushOffset >= flushMaxOffset * FLUSH_TRIGGER_RATIO;
 
   useEffect(() => {
     setEntries(loadJournalEntries());
@@ -80,6 +108,27 @@ export default function App() {
     },
     [],
   );
+
+  useEffect(() => {
+    const target = flushTrackRef.current;
+    if (!target) return undefined;
+
+    const syncTrackWidth = () => setFlushTrackWidth(target.clientWidth);
+    syncTrackWidth();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', syncTrackWidth);
+      return () => window.removeEventListener('resize', syncTrackWidth);
+    }
+
+    const observer = new ResizeObserver(syncTrackWidth);
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    setFlushOffset((previousOffset) => Math.min(previousOffset, flushMaxOffset));
+  }, [flushMaxOffset]);
 
   const recentEntries = useMemo(() => entries.slice(0, 10), [entries]);
 
@@ -145,6 +194,72 @@ export default function App() {
     } finally {
       setComfortLoading(false);
     }
+  }
+
+  function getFlushOffsetByClientX(clientX: number) {
+    const { startX, startOffset } = flushDragRef.current;
+    return Math.round(clamp(startOffset + (clientX - startX), 0, flushMaxOffset));
+  }
+
+  async function triggerFlushRelease() {
+    if (flushDisabled) return;
+
+    setFlushSubmitting(true);
+    setFlushOffset(flushMaxOffset);
+    await handleRelease();
+    setFlushSubmitting(false);
+    setFlushOffset(0);
+  }
+
+  function handleFlushPointerDown(event: React.PointerEvent<HTMLButtonElement>) {
+    if (flushDisabled || flushMaxOffset <= 0) return;
+
+    event.preventDefault();
+    flushDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startOffset: flushOffset,
+    };
+    setFlushDragging(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function handleFlushPointerMove(event: React.PointerEvent<HTMLButtonElement>) {
+    if (!flushDragging || flushDragRef.current.pointerId !== event.pointerId) return;
+    setFlushOffset(getFlushOffsetByClientX(event.clientX));
+  }
+
+  function finalizeFlushDrag(
+    target: HTMLButtonElement,
+    pointerId: number,
+    finalOffset: number,
+    canceled = false,
+  ) {
+    if (target.hasPointerCapture(pointerId)) {
+      target.releasePointerCapture(pointerId);
+    }
+    flushDragRef.current.pointerId = null;
+    setFlushDragging(false);
+
+    if (canceled || finalOffset < flushMaxOffset * FLUSH_TRIGGER_RATIO) {
+      setFlushOffset(0);
+      return;
+    }
+
+    void triggerFlushRelease();
+  }
+
+  function handleFlushPointerUp(event: React.PointerEvent<HTMLButtonElement>) {
+    if (flushDragRef.current.pointerId !== event.pointerId) return;
+
+    const finalOffset = getFlushOffsetByClientX(event.clientX);
+    setFlushOffset(finalOffset);
+    finalizeFlushDrag(event.currentTarget, event.pointerId, finalOffset);
+  }
+
+  function handleFlushPointerCancel(event: React.PointerEvent<HTMLButtonElement>) {
+    if (flushDragRef.current.pointerId !== event.pointerId) return;
+    finalizeFlushDrag(event.currentTarget, event.pointerId, flushOffset, true);
   }
 
   function handleKeepTemporarily() {
@@ -224,9 +339,41 @@ export default function App() {
           />
           <p className="hint input-hint">{privacyHint}</p>
 
-          <button type="button" className="primary" onClick={handleRelease} disabled={comfortLoading}>
-            {comfortLoading ? '한마디를 준비하는 중...' : '놓아주기'}
-          </button>
+          <div className="flush-slider">
+            <div
+              ref={flushTrackRef}
+              className={flushDisabled ? 'flush-track disabled' : flushReady ? 'flush-track ready' : 'flush-track'}
+              aria-label="놓아주기 슬라이더"
+            >
+              <div
+                className={flushDragging ? 'flush-progress dragging' : 'flush-progress'}
+                style={{ width: `${flushProgressWidth}px` }}
+              />
+              <p className="flush-label">{flushDisabled ? '한마디를 준비하는 중...' : '오른쪽으로 밀어서 비우기'}</p>
+              <span className="flush-chevrons" aria-hidden="true">
+                ›››
+              </span>
+              <button
+                type="button"
+                className={flushDragging ? 'flush-knob dragging' : 'flush-knob'}
+                style={{ transform: `translateX(${flushOffset}px)` }}
+                onPointerDown={handleFlushPointerDown}
+                onPointerMove={handleFlushPointerMove}
+                onPointerUp={handleFlushPointerUp}
+                onPointerCancel={handleFlushPointerCancel}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    void triggerFlushRelease();
+                  }
+                }}
+                aria-label="밀어서 놓아주기"
+                disabled={flushDisabled}
+              >
+                <span className="flush-knob-icon">→</span>
+              </button>
+            </div>
+          </div>
 
           {comfortError ? <p className="error">{comfortError}</p> : null}
 

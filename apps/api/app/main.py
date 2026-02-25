@@ -113,13 +113,21 @@ STUB_COMFORT: dict[Emotion, str] = {
     Emotion.happy: "테스트 모드 응답입니다. 오늘의 밝은 감정을 충분히 느끼셔도 좋습니다.",
 }
 
+LOCAL_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+
 app = FastAPI(title="Haeuso API", version="0.2.0")
 logger = logging.getLogger("haeuso.api")
 logger.setLevel(logging.INFO)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ],
+    allow_origin_regex=LOCAL_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
