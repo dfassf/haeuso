@@ -1,8 +1,8 @@
 # Node
 node_modules
 npm-debug.log*
-apps/web/dist
-apps/web/tsconfig.tsbuildinfo
+frontend/dist
+frontend/tsconfig.tsbuildinfo
 
 # Python
 __pycache__/
@@ -10,13 +10,13 @@ __pycache__/
 *.egg-info/
 .venv/
 .pytest_cache/
-apps/api/build/
+backend/build/
 
 # Env
 .env
 .env.*
 !.env.example
-!apps/api/.env.example
+!backend/.env.example
 
 # Development docs (local notes)
 docs/
