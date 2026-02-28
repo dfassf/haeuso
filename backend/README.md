@@ -34,7 +34,7 @@
 ## 테스트 실행
 
 ```bash
-cd /Users/test/Desktop/private_repo/haeuso/apps/api
+cd backend
 pip install -e ".[dev]"
 LLM_MODE=stub pytest -q
 ```

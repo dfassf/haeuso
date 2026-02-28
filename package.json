@@ -3,11 +3,11 @@
   "private": true,
   "version": "0.1.0",
   "workspaces": [
-    "apps/web"
+    "frontend"
   ],
   "scripts": {
-    "dev:web": "npm --workspace apps/web run dev",
-    "build:web": "npm --workspace apps/web run build",
-    "preview:web": "npm --workspace apps/web run preview"
+    "dev:web": "npm --workspace frontend run dev",
+    "build:web": "npm --workspace frontend run build",
+    "preview:web": "npm --workspace frontend run preview"
   }
 }

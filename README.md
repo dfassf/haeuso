@@ -2,13 +2,12 @@
 
 해우소 MVP 프로젝트입니다.
 
-- `apps/web`: Vite + React 기반 모바일 친화 UI
-- `apps/api`: FastAPI 기반 공감 문구/감정 요약 API
+- `backend`: FastAPI 기반 공감 문구/감정 요약 API
+- `frontend`: Vite + React 기반 모바일 친화 UI
 
 ## 웹 실행
 
 ```bash
-cd /Users/test/Desktop/private_repo/haeuso
 npm install
 npm run dev:web
 ```
@@ -17,7 +16,7 @@ npm run dev:web
 
 ### 웹 런타임 모드
 
-`/Users/test/Desktop/private_repo/haeuso/apps/web/.env`에 아래 값을 설정하면 동작 모드를 분리할 수 있습니다.
+`frontend/.env`에 아래 값을 설정하면 동작 모드를 분리할 수 있습니다.
 
 ```bash
 VITE_API_BASE_URL=http://localhost:8000
@@ -33,7 +32,7 @@ VITE_JOURNAL_STORE=local  # local | memory
 ## API 실행
 
 ```bash
-cd /Users/test/Desktop/private_repo/haeuso/apps/api
+cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
