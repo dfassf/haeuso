@@ -1,117 +1,27 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import date
-from enum import Enum
 import json
 import logging
-import re
 from time import perf_counter
 from uuid import uuid4
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
 
 from app.config import settings
+from app.constants import Emotion, EMOTION_KO_LABEL
 from app.llm_client import LLMNotConfiguredError, LLMRequestError, generate_comfort_line, generate_period_comment
 from app.pii_guard import mask_pii
-
-
-class Emotion(str, Enum):
-    calm = "calm"
-    sad = "sad"
-    angry = "angry"
-    anxious = "anxious"
-    happy = "happy"
-
-
-EMOTION_KO_LABEL: dict[Emotion, str] = {
-    Emotion.calm: "괜찮음",
-    Emotion.sad: "슬픔",
-    Emotion.angry: "화남",
-    Emotion.anxious: "불안",
-    Emotion.happy: "기쁨",
-}
-
-
-class ComfortRequest(BaseModel):
-    content: str = Field(min_length=1, max_length=1000)
-    emotion: Emotion | None = None
-
-
-class ComfortResponse(BaseModel):
-    category: str
-    message: str
-    resources: list[str]
-
-
-class JournalEntryIn(BaseModel):
-    date: date
-    emotion: Emotion
-
-
-class InsightRequest(BaseModel):
-    periodDays: int = Field(default=7)
-    entries: list[JournalEntryIn]
-
-
-class InsightResponse(BaseModel):
-    periodDays: int
-    dominantEmotion: str
-    emotionCounts: dict[str, int]
-    comment: str
-
-
-CRISIS_KEYWORDS = [
-    "죽고 싶",
-    "자해",
-    "끝내고 싶",
-    "사라지고 싶",
-    "극단적 선택",
-    "해치고 싶",
-]
-
-MEDICAL_RISK_PATTERNS = [
-    re.compile(r"진단"),
-    re.compile(r"처방"),
-    re.compile(r"병명"),
-    re.compile(r"입원"),
-    re.compile(r"약(?:물)?\s*(복용|드시|먹)"),
-    re.compile(r"(우울증|불안장애|조현병|양극성)"),
-    re.compile(r"치료\s*(가|를|받)"),
-]
-
-FALLBACK_COMFORT: dict[Emotion, list[str]] = {
-    Emotion.calm: [
-        "지금의 고요함을 잘 지켜내고 계시네요.",
-        "조용한 숨 하나가 마음을 단단하게 붙잡아줄 거예요.",
-    ],
-    Emotion.sad: [
-        "슬픔을 말로 꺼내는 데 이미 큰 용기가 필요했을 거예요.",
-        "오늘은 버틴 자신을 조금 더 부드럽게 대해주셔도 됩니다.",
-    ],
-    Emotion.angry: [
-        "화가 올라온 마음에는 그만한 이유가 있었을 거예요.",
-        "잠깐 멈춰 선 지금이, 마음을 다치지 않게 지키는 시간입니다.",
-    ],
-    Emotion.anxious: [
-        "불안한 마음을 혼자 붙잡고 있지 않아도 괜찮습니다.",
-        "지금 이 순간 하나만 천천히 건너가도 충분합니다.",
-    ],
-    Emotion.happy: [
-        "기쁜 마음을 오래 붙잡고 싶은 하루였겠네요.",
-        "지금의 밝은 감정이 오래 남아 주면 좋겠습니다.",
-    ],
-}
-
-STUB_COMFORT: dict[Emotion, str] = {
-    Emotion.calm: "테스트 모드 응답입니다. 지금의 차분함을 그대로 지켜도 괜찮습니다.",
-    Emotion.sad: "테스트 모드 응답입니다. 오늘의 무거움을 잠시 내려놓아도 괜찮습니다.",
-    Emotion.angry: "테스트 모드 응답입니다. 올라온 감정을 여기서 잠깐 비워내셔도 됩니다.",
-    Emotion.anxious: "테스트 모드 응답입니다. 불안이 큰 날일수록 한 호흡씩 천천히 가도 됩니다.",
-    Emotion.happy: "테스트 모드 응답입니다. 오늘의 밝은 감정을 충분히 느끼셔도 좋습니다.",
-}
+from app.schemas import ComfortRequest, ComfortResponse, InsightRequest, InsightResponse
+from app.services.guardrail import apply_comfort_guardrail, apply_insight_guardrail, is_crisis_text
+from app.services.messages import (
+    default_emotion_counter,
+    fallback_comfort_message,
+    fallback_insight_comment,
+    stub_comfort_message,
+    stub_insight_comment,
+)
 
 LOCAL_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
 
@@ -134,70 +44,9 @@ app.add_middleware(
 )
 
 
-def is_crisis_text(text: str) -> bool:
-    lowered = text.lower()
-    return any(keyword in lowered for keyword in CRISIS_KEYWORDS)
-
-
-def has_medical_risk(text: str) -> bool:
-    lowered = text.lower()
-    return any(pattern.search(lowered) for pattern in MEDICAL_RISK_PATTERNS)
-
-
 def log_event(event: str, **fields: object) -> None:
     payload = {"event": event, **fields}
     logger.info(json.dumps(payload, ensure_ascii=False))
-
-
-def fallback_comfort_message(text: str, emotion: Emotion | None) -> str:
-    target_emotion = emotion or Emotion.calm
-    lines = FALLBACK_COMFORT[target_emotion]
-    index = len(text.strip()) % len(lines)
-    return f"{lines[index]} 지금 여기까지 오신 것만으로도 충분히 잘하고 계십니다."
-
-
-def fallback_insight_comment(period_days: int, dominant: str, total: int) -> str:
-    if total == 0:
-        return "기록이 없어 해석을 만들 수 없습니다. 짧은 한 줄부터 시작해 보셔도 좋습니다."
-
-    if dominant in {"anxious", "sad", "angry"}:
-        return (
-            f"최근 {period_days}일은 소진 감정이 상대적으로 많았습니다. "
-            "해야 할 일을 줄이고, 회복 루틴을 먼저 챙기는 것이 도움이 됩니다."
-        )
-
-    return (
-        f"최근 {period_days}일은 버티는 힘과 회복 감정이 함께 보입니다. "
-        "잘 맞았던 휴식 방식은 다음 주에도 이어가 보세요."
-    )
-
-
-def stub_comfort_message(emotion: Emotion) -> str:
-    return STUB_COMFORT[emotion]
-
-
-def stub_insight_comment(period_days: int, dominant: str, total: int) -> str:
-    if total == 0:
-        return "테스트 모드 응답입니다. 기록이 없어 분석 코멘트를 만들 수 없습니다."
-
-    if dominant == "none":
-        return f"테스트 모드 응답입니다. 최근 {period_days}일 감정 흐름을 다시 모아보세요."
-
-    return f"테스트 모드 응답입니다. 최근 {period_days}일의 대표 감정은 {dominant}입니다."
-
-
-def apply_comfort_guardrail(message: str, *, text: str, emotion: Emotion) -> tuple[str, bool]:
-    if not has_medical_risk(message):
-        return message, False
-
-    return fallback_comfort_message(text=text, emotion=emotion), True
-
-
-def apply_insight_guardrail(comment: str, *, period_days: int, dominant: str, total: int) -> tuple[str, bool]:
-    if not has_medical_risk(comment):
-        return comment, False
-
-    return fallback_insight_comment(period_days=period_days, dominant=dominant, total=total), True
 
 
 @app.get("/health")
@@ -270,10 +119,6 @@ async def comfort(payload: ComfortRequest) -> ComfortResponse:
     )
 
     return ComfortResponse(category="normal", message=message, resources=[])
-
-
-def default_emotion_counter() -> dict[str, int]:
-    return {emotion.value: 0 for emotion in Emotion}
 
 
 @app.post("/api/v1/insight", response_model=InsightResponse)
