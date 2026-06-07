@@ -70,7 +70,7 @@ def _resolve_llm_mode() -> str:
 
 
 def get_settings() -> Settings:
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
+    model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash"
     timeout_sec = _resolve_int("LLM_REQUEST_TIMEOUT_SEC", 30)
 
     return Settings(

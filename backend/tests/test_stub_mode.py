@@ -7,7 +7,7 @@ from app.config import Settings
 def _stub_settings() -> Settings:
     return Settings(
         gemini_api_key="",
-        gemini_model="gemini-2.5-flash",
+        gemini_model="gemini-3.5-flash",
         llm_request_timeout_sec=30,
         llm_mode="stub",
     )

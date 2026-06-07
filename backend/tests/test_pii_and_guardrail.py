@@ -8,7 +8,7 @@ from app.pii_guard import mask_pii
 def _live_settings() -> Settings:
     return Settings(
         gemini_api_key="dummy",
-        gemini_model="gemini-2.5-flash",
+        gemini_model="gemini-3.5-flash",
         llm_request_timeout_sec=30,
         llm_mode="live",
     )

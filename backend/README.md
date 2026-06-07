@@ -7,12 +7,12 @@
 
 ## 기본 LLM 모델
 
-- 기본값: `gemini-2.5-flash`
+- 기본값: `gemini-3.5-flash`
 
 ## 환경 변수
 
 - `GEMINI_API_KEY`
-- `GEMINI_MODEL` (선택, 기본 `gemini-2.5-flash`)
+- `GEMINI_MODEL` (선택, 기본 `gemini-3.5-flash`)
 - `LLM_REQUEST_TIMEOUT_SEC` (선택)
 - `LLM_MODE` (선택, `live` | `stub`, 기본 `live`)
 
